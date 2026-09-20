@@ -1,0 +1,13 @@
+# Tested with torch 2.8.0+cu128 and Python 3.11.
+torch>=2.4
+transformers==4.57.6
+accelerate==1.13.0
+numpy==1.26.4
+einops==0.8.2
+tqdm
+wandb                      # set WANDB_MODE=disabled to run without an account
+# SSM layers: install the prebuilt wheels for your torch/CUDA build
+mamba_ssm==2.3.2.post1
+causal_conv1d==1.6.2.post1
+# optional, only for the DeltaProduct ("D") configs
+# flash-linear-attention==0.5.2
