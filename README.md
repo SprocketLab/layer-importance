@@ -282,17 +282,6 @@ second gate therefore buys **exactness at `O(1)` weights**; it is not an express
 - **No custom kernels.** Everything is stock PyTorch, so nothing here needs `mamba-ssm`,
   `causal-conv1d`, or a CUDA build.
 
-## Citation
-
-If you use this code, please cite the paper:
-
-```bibtex
-@article{reverse-hybrids,
-  title  = {The Importance of Layer Ordering in Deep Hybrid Architectures},
-  year   = {2026}
-}
-```
-
 ---
 
 # Associative recall: 8-layer sweeps (`assoc_recall/`)
@@ -368,3 +357,14 @@ Mean accuracy over seeds, d = 384, window 20, 48 epochs, auto-LR per config.
   stack that loses on decode-recall.
 - **Pure SSM beats pure TF on MQAR** (0.59 vs 0.47), the reverse of decode-recall: unbounded
   recurrence reaches definitions a width-20 window cannot.
+
+## Citation
+
+If you use this code, please cite the paper:
+
+```bibtex
+@article{reverse-hybrids,
+  title  = {The Importance of Layer Ordering in Deep Hybrid Architectures},
+  year   = {2026}
+}
+```
