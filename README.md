@@ -25,6 +25,7 @@ than using no attention at all.
 | --- | --- |
 | `exact_copy/exact_copy_hybrid.py` | The whole experiment: task, models, the hand-built construction, training sweeps, and plotting. One self-contained file, no config files. |
 | `exact_copy/acc_vs_params_w{6,11,21}_single_gated.png` | The headline result at three attention windows. |
+| `assoc_recall/` | The 8-layer associative-recall sweeps (decode-recall, MQAR, MKAR, fuzzy recall): models, task generators, sweep runners. |
 
 ## The task: exact copy
 
@@ -280,6 +281,82 @@ second gate therefore buys **exactness at `O(1)` weights**; it is not an express
   in the 0/1 regime the construction uses. `--scan sequential` switches to the reference loop.
 - **No custom kernels.** Everything is stock PyTorch, so nothing here needs `mamba-ssm`,
   `causal-conv1d`, or a CUDA build.
+
+---
+
+# Associative recall: 8-layer sweeps (`assoc_recall/`)
+
+The same ordering question asked over the whole 8-layer design space: with the layer count fixed,
+which SSM:TF ratio and which layer *order* does each recall task prefer? Every architecture is an
+8-layer stack of Mamba blocks (`S`) and RoPE transformer blocks (`T`), hidden size 384, one head,
+a **sliding attention window of 20** on sequences of 100 tokens. The small window is the point: a
+single attention layer cannot reach a definition 25-40 positions back, so recall has to come from
+SSM state or from how the layers compose.
+
+## Tasks
+
+All four are next-token tasks scored by per-position accuracy on the target positions. Vocabulary:
+32 value tokens `V0..V31` plus number tokens `#k` used as bits or separators.
+
+| Task | Sequence | Target |
+| --- | --- | --- |
+| `decode-recall` | random stream of value tokens with bits `#0`/`#1` mixed in (p = 0.2); the bits drive a running index `s = (2s + bit) mod 32` | at every position, the token that most recently *followed* `V_s` |
+| `mqar` | items `<bos> key #0 value value <eos>` packed back to back; the first occurrence of a key defines it, a later one queries it | the 2-token value of a queried key |
+| `mkar` | same with a 2-token key and 1-token value | the 1-token value |
+| `fuzzy` | 2-token key and 2-token value | the 2-token value |
+
+## Architectures and protocol
+
+`assoc_recall/decode_recall.py` holds the table `CONFIGS`: 36 named 8-character layouts covering
+every ratio from 7:1 to 1:7 with TF-at-start, TF-at-end, alternating and even orderings, and all
+eight positions of a single TF layer (e.g. `pure_tf = TTTTTTTT`, `4s4t_alternate = STSTSTST`,
+`5s3t_end = SSSSSTTT`, `6s2t_start = TTSSSSSS`). `D` layouts swap Mamba for a DeltaProduct block
+and need `flash-linear-attention`.
+
+Training: 1000 sequences per epoch, batch 8, 48 epochs, AdamW. The learning rate is chosen **per
+architecture**: lowest loss over a 7-point log grid `1e-4 .. 1e-3`, two passes of two epochs each,
+cached in `results/<cond>/auto_lr.json`. Seeds: 3 to screen and 5 for finalists on decode-recall,
+5 on MQAR, 7 on MKAR and fuzzy. Metric: per-position accuracy on target positions.
+
+## Usage
+
+```bash
+cd assoc_recall
+pip install -r requirements.txt          # mamba_ssm / causal_conv1d need the wheel for your torch+CUDA
+export WANDB_MODE=disabled
+
+python decode_recall.py --round1         # all configs, 3 seeds, auto-LR each (resume-safe)
+python decode_recall.py --round2         # 5 seeds on the round-1 finalists
+python decode_recall.py --config 4s4t_alternate [--lr 3e-4 --seed 0]
+python mqar.py; python mkar.py; python fuzzy.py
+python plot_architecture_sweep.py        # decode-recall accuracy vs #SSM
+```
+
+Every run writes `results/<cond>/<task>/<config>/<config>__lr<lr>__seed<k>.json`; existing files
+are skipped. `--dry-run` prints the plan.
+
+## Results
+
+Mean accuracy over seeds, d = 384, window 20, 48 epochs, auto-LR per config.
+
+| | decode-recall (5 seeds) | MQAR (5) | MKAR (7) | fuzzy (7) |
+| --- | --- | --- | --- | --- |
+| `pure_tf` (TTTTTTTT) | 0.74 | 0.47 | 0.31 | - |
+| `pure_ssm` (SSSSSSSS) | 0.49 | 0.59 | 0.33 | - |
+| `4s4t_alternate` (STSTSTST) | **0.81** | 0.92 | 0.50 | 0.57 |
+| `5s3t_end` (SSSSSTTT) | 0.77 | **0.94** | 0.63 | 0.57 |
+| `6s2t_start` (TTSSSSSS) | 0.55 | 0.70 | **0.67** | **0.77** |
+| `7s1t_start` (TSSSSSSS) | 0.79 | 0.64 | 0.66 | - |
+
+- **Ratio barely matters, order does.** On decode-recall the best order at every ratio from 2:6
+  to 7:1 lands within 0.75-0.81; the only cliff is `pure_ssm`. Within a ratio every order that
+  *ends* in TF beats every order that ends in SSM, and TF-first (`TTSSSSSS`, 0.55) is worse than
+  pure TF.
+- **The best order is task-dependent.** Alternating wins decode-recall and is within noise of the
+  TF-at-end winner on MQAR; the multi-token-key tasks (MKAR, fuzzy) prefer the SSM-heavy TF-first
+  stack that loses on decode-recall.
+- **Pure SSM beats pure TF on MQAR** (0.59 vs 0.47), the reverse of decode-recall: unbounded
+  recurrence reaches definitions a width-20 window cannot.
 
 ## Citation
 
