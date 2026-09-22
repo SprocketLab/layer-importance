@@ -25,7 +25,7 @@ than using no attention at all.
 | --- | --- |
 | `exact_copy/exact_copy_hybrid.py` | The whole experiment: task, models, the hand-built construction, training sweeps, and plotting. One self-contained file, no config files. |
 | `exact_copy/acc_vs_params_w{6,11,21}_single_gated.png` | The headline result at three attention windows. |
-| `assoc_recall/` | The 8-layer associative-recall sweeps (decode-recall, MQAR, MKAR, fuzzy recall): models, task generators, sweep runners. See `assoc_recall/README.md`. |
+| `assoc_recall/` | The 8-layer associative-recall sweeps (decode-recall, MQAR, MKAR, fuzzy recall): models, task generators, sweep runners. |
 
 ## The task: exact copy
 
